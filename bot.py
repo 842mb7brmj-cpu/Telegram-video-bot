@@ -31,7 +31,7 @@ def download_video(url):
 
 @bot.message_handler(commands=["start", "help"])
 def send_welcome(message):
-    bot.reply_to(message, "👋 Welcome! Send me a TikTok or Instagram link!\n\n✅ I'll send it back without watermark in best quality 🎬")
+    bot.reply_to(message, "👋 سلام عليكم Send me a TikTok or Instagram link!\n\n✅ I'll send it back without watermark in best quality 🎬")
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
@@ -39,7 +39,7 @@ def handle_message(message):
     if not is_supported_url(url):
         bot.reply_to(message, "❌ Please send a valid TikTok or Instagram link.")
         return
-    status_msg = bot.reply_to(message, "⏳ Downloading... please wait!")
+    status_msg = bot.reply_to(message, "⏳ Downloading... please wait خو بگره!")
     try:
         video_path = download_video(url)
         if os.path.getsize(video_path) > 50 * 1024 * 1024:
