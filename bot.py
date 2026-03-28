@@ -76,14 +76,14 @@ user_states = {}
 @bot.message_handler(commands=["start", "help"])
 def send_welcome(message):
     bot.reply_to(message, (
-        "👋 Welcome to the Ultimate Downloader Bot!\n\n"
+        "👋 سلاڤ to the Ultimate Downloader Bot!\n\n"
         "🎬 TikTok (no watermark)\n"
         "📸 TikTok Photos\n"
         "📱 Instagram Reels & Posts\n"
-        "🎥 YouTube Shorts\n"
+        "🎥 YouTube Shorts\n" خه
         "🐦 Twitter/X Videos\n"
         "📘 Facebook Videos\n\n"
-        "Just send me any link and choose what you want!\n"
+        "لينكي فريكه خوهـ يا جي به رنامجي بتJust send me any link and choose what you want!\n"
         "Better than SnapTik & TikMate 😎"
     ))
 
@@ -92,7 +92,7 @@ def handle_message(message):
     url = message.text.strip()
 
     if not is_supported_url(url):
-        bot.reply_to(message, "❌ Please send a valid video link!")
+        bot.reply_to(message, "❌ Please send a valid video link!،!ببوره به س لينكي فريكه❌")
         return
 
     user_states[message.chat.id] = url
