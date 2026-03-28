@@ -2,6 +2,8 @@ import telebot
 import yt_dlp
 import os
 import tempfile
+import requests
+import re
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -15,9 +17,35 @@ SUPPORTED_DOMAINS = [
 def is_supported_url(url):
     return any(domain in url for domain in SUPPORTED_DOMAINS)
 
+def get_tiktok_photos(url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
+        "Referer": "https://www.tiktok.com/",
+    }
+    session = requests.Session()
+    response = session.get(url, headers=headers, allow_redirects=True)
+    final_url = response.url
+
+    api_url = f"https://api22-normal-c-useast2a.tiktokv.com/aweme/v1/feed/?aweme_id={final_url.split('/')[-1].split('?')[0]}&version_code=262036&app_name=musical_ly"
+    api_response = requests.get(api_url, headers=headers)
+    data = api_response.json()
+
+    photos = []
+    try:
+        aweme = data["aweme_list"][0]
+        image_post = aweme.get("image_post_info", {})
+        images = image_post.get("images", [])
+        for img in images:
+            img_url = img["display_image"]["url_list"][0]
+            photos.append(img_url)
+    except:
+        pass
+    return photos
+
 def download_content(url, mode="video", quality="best"):
     tmpdir = tempfile.mkdtemp()
     output_path = os.path.join(tmpdir, "%(title)s.%(ext)s")
+
     if mode == "audio":
         ydl_opts = {
             "outtmpl": output_path,
@@ -44,6 +72,7 @@ def download_content(url, mode="video", quality="best"):
             "quiet": True,
             "no_warnings": True,
         }
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         entries = info.get("entries", None)
@@ -75,7 +104,8 @@ def send_welcome(message):
         "👋 Welcome to the Ultimate Downloader Bot! 🔥\n\n"
         "📥 I can download from:\n"
         "🎵 TikTok (no watermark)\n"
-        "📸 Instagram Reels & Posts\n"
+        "📸 TikTok Photo Slideshows\n"
+        "📱 Instagram Reels & Posts\n"
         "🎥 YouTube Shorts\n"
         "🐦 Twitter/X Videos\n"
         "📘 Facebook Videos\n\n"
@@ -89,7 +119,34 @@ def handle_message(message):
     if not is_supported_url(url):
         bot.reply_to(message, "❌ Invalid link! Please send a TikTok, Instagram, YouTube, Twitter or Facebook link!")
         return
+
     user_states[message.chat.id] = url
+
+    # Check if it's a photo slideshow
+    if "tiktok.com" in url:
+        status_msg = bot.reply_to(message, "⏳ Checking link... 🔄")
+        try:
+            headers = {"User-Agent": "Mozilla/5.0"}
+            response = requests.get(url, headers=headers, allow_redirects=True)
+            if "/photo/" in response.url:
+                bot.edit_message_text("📸 Photo slideshow detected! Downloading...", chat_id=message.chat.id, message_id=status_msg.message_id)
+                photo_urls = get_tiktok_photos(url)
+                if photo_urls:
+                    media = []
+                    for photo_url in photo_urls:
+                        media.append(telebot.types.InputMediaPhoto(photo_url))
+                    bot.delete_message(message.chat.id, status_msg.message_id)
+                    bot.send_media_group(message.chat.id, media)
+                    return
+                else:
+                    bot.edit_message_text("❌ Could not download photos!", chat_id=message.chat.id, message_id=status_msg.message_id)
+                    return
+        except Exception as e:
+            bot.edit_message_text(f"❌ Error: {str(e)}", chat_id=message.chat.id, message_id=status_msg.message_id)
+            return
+
+        bot.delete_message(message.chat.id, status_msg.message_id)
+
     markup = telebot.types.InlineKeyboardMarkup()
     markup.row(
         telebot.types.InlineKeyboardButton("🎬 Best Quality", callback_data="best"),
