@@ -38,22 +38,6 @@ def get_tiktok_photos(url):
     except:
         return []
 
-def get_instagram_content(url):
-    try:
-        api_url = f"https://instagram-downloader-download-instagram-videos-stories.p.rapidapi.com/index"
-        headers = {
-            "X-RapidAPI-Key": "your-rapidapi-key",
-            "X-RapidAPI-Host": "instagram-downloader-download-instagram-videos-stories.p.rapidapi.com"
-        }
-        params = {"url": url}
-        response = requests.get(api_url, headers=headers, params=params)
-        data = response.json()
-        if data.get("media"):
-            return data["media"]
-        return None
-    except:
-        return None
-
 def get_instagram_video(url):
     try:
         api_url = f"https://api.tikwm.com/api/?url={url}&hd=1"
@@ -133,7 +117,7 @@ def send_welcome(message):
         "📥 I can download from:\n"
         "🎵 TikTok (no watermark)\n"
         "📸 TikTok Photo Slideshows\n"
-        "📱 Instagram Reels, Posts & Stories\n"
+        "📱 Instagram Reels & Posts\n"
         "🎥 YouTube Shorts\n"
         "🐦 Twitter/X Videos\n"
         "📘 Facebook Videos\n\n"
@@ -175,51 +159,27 @@ def handle_message(message):
         bot.delete_message(message.chat.id, status_msg.message_id)
 
     if "instagram.com" in url:
-        status_msg = bot.reply_to(message, "⏳ Checking Instagram link... 🔄")
-        try:
-            if "/stories/" in url:
-                bot.edit_message_text("📖 Story detected! Downloading...", chat_id=message.chat.id, message_id=status_msg.message_id)
-                ydl_opts = {
-                    "outtmpl": os.path.join(tempfile.mkdtemp(), "%(title)s.%(ext)s"),
-                    "format": "best",
-                    "quiet": True,
-                    "no_warnings": True,
-                    "http_headers": {
-                        "User-Agent": "Instagram 219.0.0.12.117 Android (28/9; 411dpi; 1080x2244; Xiaomi; Mi A2; jasmine_sprout; qcom; en_US; 301087931)",
-                        "Accept": "*/*",
-                        "Accept-Language": "en-US",
-                        "Accept-Encoding": "gzip, deflate",
-                        "Connection": "keep-alive",
-                    },
-                }
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    filename = ydl.prepare_filename(info)
-                    if not os.path.exists(filename):
-                        filename = filename.rsplit(".", 1)[0] + ".mp4"
-                    bot.delete_message(message.chat.id, status_msg.message_id)
-                    with open(filename, "rb") as video:
-                        bot.send_video(message.chat.id, video, supports_streaming=True, caption="✅ Here is your Instagram Story! 📖🔥")
-                    os.remove(filename)
-                    return
-            else:
-                video_url = get_instagram_video(url)
-                if video_url:
-                    bot.edit_message_text("📱 Downloading Instagram video...", chat_id=message.chat.id, message_id=status_msg.message_id)
-                    video_response = requests.get(video_url, headers={"User-Agent": "Mozilla/5.0"})
-                    tmpdir = tempfile.mkdtemp()
-                    video_path = os.path.join(tmpdir, "video.mp4")
-                    with open(video_path, "wb") as f:
-                        f.write(video_response.content)
-                    bot.delete_message(message.chat.id, status_msg.message_id)
-                    with open(video_path, "rb") as video:
-                        bot.send_video(message.chat.id, video, supports_streaming=True, caption="✅ Here is your Instagram video! 📱🔥")
-                    os.remove(video_path)
-                    return
-        except Exception as e:
-            bot.edit_message_text(f"❌ Stories require login - not supported yet 😔", chat_id=message.chat.id, message_id=status_msg.message_id)
+        if "/stories/" in url:
+            bot.reply_to(message, "❌ Instagram Stories require login and are not supported yet 😔\n\nTry sending a Reel or Post instead!")
             return
-        bot.delete_message(message.chat.id, status_msg.message_id)
+        status_msg = bot.reply_to(message, "⏳ Downloading Instagram video... 🔄")
+        try:
+            video_url = get_instagram_video(url)
+            if video_url:
+                video_response = requests.get(video_url, headers={"User-Agent": "Mozilla/5.0"})
+                tmpdir = tempfile.mkdtemp()
+                video_path = os.path.join(tmpdir, "video.mp4")
+                with open(video_path, "wb") as f:
+                    f.write(video_response.content)
+                bot.delete_message(message.chat.id, status_msg.message_id)
+                with open(video_path, "rb") as video:
+                    bot.send_video(message.chat.id, video, supports_streaming=True, caption="✅ Here is your Instagram video! 📱🔥")
+                os.remove(video_path)
+                return
+            else:
+                bot.delete_message(message.chat.id, status_msg.message_id)
+        except Exception as e:
+            bot.delete_message(message.chat.id, status_msg.message_id)
 
     markup = telebot.types.InlineKeyboardMarkup()
     markup.row(
