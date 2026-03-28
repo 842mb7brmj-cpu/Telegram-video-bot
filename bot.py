@@ -3,7 +3,6 @@ import yt_dlp
 import os
 import tempfile
 import requests
-import re
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -23,23 +22,25 @@ def get_tiktok_photos(url):
         session = requests.Session()
         response = session.get(url, headers=headers, allow_redirects=True)
         final_url = response.url
-        api_url = f"https://tikwm.com/api/?url={final_url}&hd=1"
-        api_response = requests.get(api_url, headers=headers)
+        api_url = "https://tikwm.com/api/"
+        payload = {"url": final_url, "hd": 1}
+        api_response = requests.post(api_url, data=payload, headers=headers)
         data = api_response.json()
         photos = []
         if data.get("code") == 0:
             images = data.get("data", {}).get("images", [])
             for img in images:
-                photos.append(img)
-        return photos
+                if isinstance(img, dict):
+                    photos.append(img.get("url", ""))
+                else:
+                    photos.append(img)
+        return [p for p in photos if p]
     except:
         return []
-
 
 def download_content(url, mode="video", quality="best"):
     tmpdir = tempfile.mkdtemp()
     output_path = os.path.join(tmpdir, "%(title)s.%(ext)s")
-
     if mode == "audio":
         ydl_opts = {
             "outtmpl": output_path,
@@ -66,7 +67,6 @@ def download_content(url, mode="video", quality="best"):
             "quiet": True,
             "no_warnings": True,
         }
-
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         entries = info.get("entries", None)
@@ -96,6 +96,7 @@ user_states = {}
 def send_welcome(message):
     bot.reply_to(message,
         "👋 Welcome to the Ultimate Downloader Bot! 🔥\n\n"
+        "👑 Owner: @.unknown.0x0 on TikTok\n\n"
         "📥 I can download from:\n"
         "🎵 TikTok (no watermark)\n"
         "📸 TikTok Photo Slideshows\n"
@@ -116,7 +117,6 @@ def handle_message(message):
 
     user_states[message.chat.id] = url
 
-    # Check if it's a photo slideshow
     if "tiktok.com" in url:
         status_msg = bot.reply_to(message, "⏳ Checking link... 🔄")
         try:
@@ -131,14 +131,14 @@ def handle_message(message):
                         media.append(telebot.types.InputMediaPhoto(photo_url))
                     bot.delete_message(message.chat.id, status_msg.message_id)
                     bot.send_media_group(message.chat.id, media)
+                    bot.send_message(message.chat.id, "✅ Here are your photos! 📸🔥")
                     return
                 else:
-                    bot.edit_message_text("❌ Could not download photos!", chat_id=message.chat.id, message_id=status_msg.message_id)
+                    bot.edit_message_text("❌ Could not download photos! Try again.", chat_id=message.chat.id, message_id=status_msg.message_id)
                     return
         except Exception as e:
             bot.edit_message_text(f"❌ Error: {str(e)}", chat_id=message.chat.id, message_id=status_msg.message_id)
             return
-
         bot.delete_message(message.chat.id, status_msg.message_id)
 
     markup = telebot.types.InlineKeyboardMarkup()
