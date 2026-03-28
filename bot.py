@@ -59,11 +59,13 @@ def get_tiktok_video(url, quality="hd"):
 
 def get_instagram_video(url):
     try:
-        api_url = f"https://api.tikwm.com/api/?url={url}&hd=1"
-        response = requests.get(api_url, headers={"User-Agent": "Mozilla/5.0"})
-        data = response.json()
+        headers = {"User-Agent": "Mozilla/5.0"}
+        api_url = "https://tikwm.com/api/"
+        payload = {"url": url, "hd": 1}
+        api_response = requests.post(api_url, data=payload, headers=headers)
+        data = api_response.json()
         if data.get("code") == 0:
-            return data.get("data", {}).get("play", None)
+            return data.get("data", {}).get("hdplay") or data.get("data", {}).get("play")
         return None
     except:
         return None
@@ -204,64 +206,7 @@ def handle_message(message):
                         bot.send_video(message.chat.id, video, supports_streaming=True, caption="✅ Here is your Instagram video! 📱🔥")
                     os.remove(video_path)
                     return
-        except:
-            pass
-        bot.delete_message(message.chat.id, status_msg.message_id)
-
-    show_quality_buttons(message)
-
-@bot.callback_query_handler(func=lambda call: True)
-def handle_callback(call):
-    chat_id = call.message.chat.id
-    url = user_states.get(chat_id)
-    if not url:
-        bot.answer_callback_query(call.id, "❌ Please send a link first!")
-        return
-    mode = "audio" if call.data == "audio" else "video"
-    quality = call.data if call.data in ["hd", "sd"] else "best"
-    bot.answer_callback_query(call.id)
-    status_msg = bot.send_message(chat_id, "⏳ Downloading... please wait! 🔄")
-    try:
-        if "tiktok.com" in url:
-            if mode == "audio":
-                content_type, content = download_content(url, mode="audio")
-                bot.edit_message_text("🎵 Sending your MP3...", chat_id=chat_id, message_id=status_msg.message_id)
-                with open(content, "rb") as audio:
-                    bot.send_audio(chat_id, audio, caption="🎵 Here is your MP3! Enjoy the music! 🎶")
-                return
-            tiktok_quality = "hd" if quality in ["hd", "best"] else "sd"
-            video_url = get_tiktok_video(url, quality=tiktok_quality)
-            if video_url:
-                video_path = download_video_file(video_url)
-                if video_path:
-                    bot.edit_message_text("🎬 Sending your TikTok...", chat_id=chat_id, message_id=status_msg.message_id)
-                    with open(video_path, "rb") as video:
-                        bot.send_video(chat_id, video, supports_streaming=True, caption="✅ Here is your TikTok without watermark! 🎵🔥")
-                    os.remove(video_path)
-                    return
-            bot.edit_message_text("❌ Could not download TikTok!", chat_id=chat_id, message_id=status_msg.message_id)
+            bot.delete_message(message.chat.id, status_msg.message_id)
+            bot.send_message(message.chat.id, "❌ Could not download Instagram video! Try again.")
             return
-
-        content_type, content = download_content(url, mode=mode, quality=quality)
-        if content_type == "audio":
-            bot.edit_message_text("🎵 Sending your MP3...", chat_id=chat_id, message_id=status_msg.message_id)
-            with open(content, "rb") as audio:
-                bot.send_audio(chat_id, audio, caption="🎵 Here is your MP3! Enjoy the music! 🎶")
-        else:
-            if os.path.getsize(content) > 50 * 1024 * 1024:
-                bot.edit_message_text("❌ Video too large (over 50MB)!", chat_id=chat_id, message_id=status_msg.message_id)
-                return
-            bot.edit_message_text("🎬 Sending your video...", chat_id=chat_id, message_id=status_msg.message_id)
-            with open(content, "rb") as video:
-                bot.send_video(chat_id, video, supports_streaming=True, caption="✅ Here is your video without watermark! 🎬🔥")
-    except Exception as e:
-        bot.edit_message_text(f"❌ Error: {str(e)}", chat_id=chat_id, message_id=status_msg.message_id)
-    finally:
-        user_states.pop(chat_id, None)
-        try:
-            if os.path.exists(content):
-                os.remove(content)
-        except:
-            pass
-
-bot.infinity_polling()
+        except Exception as​​​​​​​​​​​​​​​​
