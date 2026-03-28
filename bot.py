@@ -38,6 +38,17 @@ def get_tiktok_photos(url):
     except:
         return []
 
+def get_instagram_video(url):
+    try:
+        api_url = f"https://api.tikwm.com/api/?url={url}&hd=1"
+        response = requests.get(api_url, headers={"User-Agent": "Mozilla/5.0"})
+        data = response.json()
+        if data.get("code") == 0:
+            return data.get("data", {}).get("play", None)
+        return None
+    except:
+        return None
+
 def download_content(url, mode="video", quality="best"):
     tmpdir = tempfile.mkdtemp()
     output_path = os.path.join(tmpdir, "%(title)s.%(ext)s")
@@ -63,7 +74,13 @@ def download_content(url, mode="video", quality="best"):
             "merge_output_format": "mp4",
             "noplaylist": False,
             "extractor_args": {"tiktok": {"webpage_download": ["1"]}},
-            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"},
+            "http_headers": {
+                "User-Agent": "Instagram 219.0.0.12.117 Android",
+                "Accept": "*/*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate",
+                "Connection": "keep-alive",
+            },
             "quiet": True,
             "no_warnings": True,
         }
@@ -139,6 +156,26 @@ def handle_message(message):
         except Exception as e:
             bot.edit_message_text(f"❌ Error: {str(e)}", chat_id=message.chat.id, message_id=status_msg.message_id)
             return
+        bot.delete_message(message.chat.id, status_msg.message_id)
+
+    if "instagram.com" in url:
+        status_msg = bot.reply_to(message, "⏳ Checking Instagram link... 🔄")
+        try:
+            video_url = get_instagram_video(url)
+            if video_url:
+                bot.edit_message_text("📱 Downloading Instagram video...", chat_id=message.chat.id, message_id=status_msg.message_id)
+                video_response = requests.get(video_url, headers={"User-Agent": "Mozilla/5.0"})
+                tmpdir = tempfile.mkdtemp()
+                video_path = os.path.join(tmpdir, "video.mp4")
+                with open(video_path, "wb") as f:
+                    f.write(video_response.content)
+                bot.delete_message(message.chat.id, status_msg.message_id)
+                with open(video_path, "rb") as video:
+                    bot.send_video(message.chat.id, video, supports_streaming=True, caption="✅ Here is your Instagram video! 📱🔥")
+                os.remove(video_path)
+                return
+        except Exception as e:
+            pass
         bot.delete_message(message.chat.id, status_msg.message_id)
 
     markup = telebot.types.InlineKeyboardMarkup()
