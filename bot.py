@@ -19,6 +19,31 @@ def is_supported_url(url):
 
 def get_tiktok_photos(url):
     headers = {
+        "User-Agent": "com.zhiliaoapp.musically/2022600030 (Linux; U; Android 7.1.2; timezone/America/New_York; HONOR; BWS-A14; Build/N2G48H;tt-ok/3.12.13.1)",
+        "Accept": "application/json",
+    }
+    session = requests.Session()
+    response = session.get(url, headers=headers, allow_redirects=True)
+    final_url = response.url
+    video_id = final_url.split("/photo/")[-1].split("?")[0]
+    
+    api_url = f"https://api16-normal-c-useast1a.tiktokv.com/aweme/v1/feed/?aweme_id={video_id}&version_code=262036&app_name=musical_ly&channel=googleplay&device_type=Pixel+4&os_version=7.1.2"
+    api_response = requests.get(api_url, headers=headers)
+    data = api_response.json()
+
+    photos = []
+    try:
+        aweme = data["aweme_list"][0]
+        image_post = aweme.get("image_post_info", {})
+        images = image_post.get("images", [])
+        for img in images:
+            img_url = img["display_image"]["url_list"][0]
+            photos.append(img_url)
+    except:
+        pass
+    return photos
+
+    headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
         "Referer": "https://www.tiktok.com/",
     }
