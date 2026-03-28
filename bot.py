@@ -38,7 +38,7 @@ def get_tiktok_photos(url):
     except:
         return []
 
-def get_tiktok_video(url):
+def get_tiktok_video(url, quality="hd"):
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         session = requests.Session()
@@ -49,7 +49,10 @@ def get_tiktok_video(url):
         api_response = requests.post(api_url, data=payload, headers=headers)
         data = api_response.json()
         if data.get("code") == 0:
-            return data.get("data", {}).get("hdplay") or data.get("data", {}).get("play")
+            if quality == "hd":
+                return data.get("data", {}).get("hdplay") or data.get("data", {}).get("play")
+            else:
+                return data.get("data", {}).get("play")
         return None
     except:
         return None
@@ -62,6 +65,18 @@ def get_instagram_video(url):
         if data.get("code") == 0:
             return data.get("data", {}).get("play", None)
         return None
+    except:
+        return None
+
+def download_video_file(video_url):
+    try:
+        tmpdir = tempfile.mkdtemp()
+        video_path = os.path.join(tmpdir, "video.mp4")
+        response = requests.get(video_url, headers={"User-Agent": "Mozilla/5.0"}, stream=True)
+        with open(video_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        return video_path
     except:
         return None
 
@@ -110,6 +125,18 @@ def download_content(url, mode="video", quality="best"):
 
 user_states = {}
 
+def show_quality_buttons(message):
+    markup = telebot.types.InlineKeyboardMarkup()
+    markup.row(
+        telebot.types.InlineKeyboardButton("🎬 Best Quality", callback_data="best"),
+        telebot.types.InlineKeyboardButton("📺 HD 1080p", callback_data="hd")
+    )
+    markup.row(
+        telebot.types.InlineKeyboardButton("📱 SD 480p", callback_data="sd"),
+        telebot.types.InlineKeyboardButton("🎵 MP3 Audio", callback_data="audio")
+    )
+    bot.reply_to(message, "⚡ Choose your download format:", reply_markup=markup)
+
 @bot.message_handler(commands=["start", "help"])
 def send_welcome(message):
     bot.reply_to(message,
@@ -136,7 +163,7 @@ def handle_message(message):
     user_states[message.chat.id] = url
 
     if "tiktok.com" in url:
-        status_msg = bot.reply_to(message, "⏳ Downloading TikTok... 🔄")
+        status_msg = bot.reply_to(message, "⏳ Checking TikTok link... 🔄")
         try:
             headers = {"User-Agent": "Mozilla/5.0"}
             response = requests.get(url, headers=headers, allow_redirects=True)
@@ -155,27 +182,12 @@ def handle_message(message):
                 else:
                     bot.edit_message_text("❌ Could not download photos!", chat_id=message.chat.id, message_id=status_msg.message_id)
                     return
-            else:
-                video_url = get_tiktok_video(url)
-                if video_url:
-                    bot.edit_message_text("🎵 Downloading video...", chat_id=message.chat.id, message_id=status_msg.message_id)
-                    video_response = requests.get(video_url, headers={"User-Agent": "Mozilla/5.0"}, stream=True)
-                    tmpdir = tempfile.mkdtemp()
-                    video_path = os.path.join(tmpdir, "video.mp4")
-                    with open(video_path, "wb") as f:
-                        for chunk in video_response.iter_content(chunk_size=8192):
-                            f.write(chunk)
-                    bot.delete_message(message.chat.id, status_msg.message_id)
-                    with open(video_path, "rb") as video:
-                        bot.send_video(message.chat.id, video, supports_streaming=True, caption="✅ Here is your TikTok without watermark! 🎵🔥")
-                    os.remove(video_path)
-                    return
-                else:
-                    bot.edit_message_text("❌ Could not download TikTok!", chat_id=message.chat.id, message_id=status_msg.message_id)
-                    return
         except Exception as e:
             bot.edit_message_text(f"❌ Error: {str(e)}", chat_id=message.chat.id, message_id=status_msg.message_id)
             return
+        bot.delete_message(message.chat.id, status_msg.message_id)
+        show_quality_buttons(message)
+        return
 
     if "instagram.com" in url:
         if "/stories/" in url:
@@ -185,32 +197,18 @@ def handle_message(message):
         try:
             video_url = get_instagram_video(url)
             if video_url:
-                video_response = requests.get(video_url, headers={"User-Agent": "Mozilla/5.0"}, stream=True)
-                tmpdir = tempfile.mkdtemp()
-                video_path = os.path.join(tmpdir, "video.mp4")
-                with open(video_path, "wb") as f:
-                    for chunk in video_response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                bot.delete_message(message.chat.id, status_msg.message_id)
-                with open(video_path, "rb") as video:
-                    bot.send_video(message.chat.id, video, supports_streaming=True, caption="✅ Here is your Instagram video! 📱🔥")
-                os.remove(video_path)
-                return
-            else:
-                bot.delete_message(message.chat.id, status_msg.message_id)
-        except Exception as e:
-            bot.delete_message(message.chat.id, status_msg.message_id)
+                video_path = download_video_file(video_url)
+                if video_path:
+                    bot.delete_message(message.chat.id, status_msg.message_id)
+                    with open(video_path, "rb") as video:
+                        bot.send_video(message.chat.id, video, supports_streaming=True, caption="✅ Here is your Instagram video! 📱🔥")
+                    os.remove(video_path)
+                    return
+        except:
+            pass
+        bot.delete_message(message.chat.id, status_msg.message_id)
 
-    markup = telebot.types.InlineKeyboardMarkup()
-    markup.row(
-        telebot.types.InlineKeyboardButton("🎬 Best Quality", callback_data="best"),
-        telebot.types.InlineKeyboardButton("📺 HD 1080p", callback_data="hd")
-    )
-    markup.row(
-        telebot.types.InlineKeyboardButton("📱 SD 480p", callback_data="sd"),
-        telebot.types.InlineKeyboardButton("🎵 MP3 Audio", callback_data="audio")
-    )
-    bot.reply_to(message, "⚡ Choose your download format:", reply_markup=markup)
+    show_quality_buttons(message)
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callback(call):
@@ -224,6 +222,26 @@ def handle_callback(call):
     bot.answer_callback_query(call.id)
     status_msg = bot.send_message(chat_id, "⏳ Downloading... please wait! 🔄")
     try:
+        if "tiktok.com" in url:
+            if mode == "audio":
+                content_type, content = download_content(url, mode="audio")
+                bot.edit_message_text("🎵 Sending your MP3...", chat_id=chat_id, message_id=status_msg.message_id)
+                with open(content, "rb") as audio:
+                    bot.send_audio(chat_id, audio, caption="🎵 Here is your MP3! Enjoy the music! 🎶")
+                return
+            tiktok_quality = "hd" if quality in ["hd", "best"] else "sd"
+            video_url = get_tiktok_video(url, quality=tiktok_quality)
+            if video_url:
+                video_path = download_video_file(video_url)
+                if video_path:
+                    bot.edit_message_text("🎬 Sending your TikTok...", chat_id=chat_id, message_id=status_msg.message_id)
+                    with open(video_path, "rb") as video:
+                        bot.send_video(chat_id, video, supports_streaming=True, caption="✅ Here is your TikTok without watermark! 🎵🔥")
+                    os.remove(video_path)
+                    return
+            bot.edit_message_text("❌ Could not download TikTok!", chat_id=chat_id, message_id=status_msg.message_id)
+            return
+
         content_type, content = download_content(url, mode=mode, quality=quality)
         if content_type == "audio":
             bot.edit_message_text("🎵 Sending your MP3...", chat_id=chat_id, message_id=status_msg.message_id)
