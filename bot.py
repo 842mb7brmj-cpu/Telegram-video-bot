@@ -38,6 +38,22 @@ def get_tiktok_photos(url):
     except:
         return []
 
+def get_tiktok_video(url):
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        session = requests.Session()
+        response = session.get(url, headers=headers, allow_redirects=True)
+        final_url = response.url
+        api_url = "https://tikwm.com/api/"
+        payload = {"url": final_url, "hd": 1}
+        api_response = requests.post(api_url, data=payload, headers=headers)
+        data = api_response.json()
+        if data.get("code") == 0:
+            return data.get("data", {}).get("hdplay") or data.get("data", {}).get("play")
+        return None
+    except:
+        return None
+
 def get_instagram_video(url):
     try:
         api_url = f"https://api.tikwm.com/api/?url={url}&hd=1"
@@ -73,7 +89,6 @@ def download_content(url, mode="video", quality="best"):
             "format": fmt,
             "merge_output_format": "mp4",
             "noplaylist": False,
-            "extractor_args": {"tiktok": {"webpage_download": ["1"]}},
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -86,20 +101,6 @@ def download_content(url, mode="video", quality="best"):
         }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
-        entries = info.get("entries", None)
-        if entries:
-            photos = []
-            for entry in entries:
-                filename = ydl.prepare_filename(entry)
-                for ext in ["jpg", "jpeg", "png", "webp", "mp4"]:
-                    alt = filename.rsplit(".", 1)[0] + f".{ext}"
-                    if os.path.exists(alt):
-                        photos.append(alt)
-                        break
-                if os.path.exists(filename):
-                    photos.append(filename)
-            if photos:
-                return "photos", list(set(photos))
         filename = ydl.prepare_filename(info)
         if mode == "audio":
             filename = filename.rsplit(".", 1)[0] + ".mp3"
@@ -135,11 +136,12 @@ def handle_message(message):
     user_states[message.chat.id] = url
 
     if "tiktok.com" in url:
-        status_msg = bot.reply_to(message, "⏳ Checking link... 🔄")
+        status_msg = bot.reply_to(message, "⏳ Downloading TikTok... 🔄")
         try:
             headers = {"User-Agent": "Mozilla/5.0"}
             response = requests.get(url, headers=headers, allow_redirects=True)
-            if "/photo/" in response.url:
+            final_url = response.url
+            if "/photo/" in final_url:
                 bot.edit_message_text("📸 Photo slideshow detected! Downloading...", chat_id=message.chat.id, message_id=status_msg.message_id)
                 photo_urls = get_tiktok_photos(url)
                 if photo_urls:
@@ -151,12 +153,29 @@ def handle_message(message):
                     bot.send_message(message.chat.id, "✅ Here are your photos! 📸🔥")
                     return
                 else:
-                    bot.edit_message_text("❌ Could not download photos! Try again.", chat_id=message.chat.id, message_id=status_msg.message_id)
+                    bot.edit_message_text("❌ Could not download photos!", chat_id=message.chat.id, message_id=status_msg.message_id)
+                    return
+            else:
+                video_url = get_tiktok_video(url)
+                if video_url:
+                    bot.edit_message_text("🎵 Downloading video...", chat_id=message.chat.id, message_id=status_msg.message_id)
+                    video_response = requests.get(video_url, headers={"User-Agent": "Mozilla/5.0"}, stream=True)
+                    tmpdir = tempfile.mkdtemp()
+                    video_path = os.path.join(tmpdir, "video.mp4")
+                    with open(video_path, "wb") as f:
+                        for chunk in video_response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    bot.delete_message(message.chat.id, status_msg.message_id)
+                    with open(video_path, "rb") as video:
+                        bot.send_video(message.chat.id, video, supports_streaming=True, caption="✅ Here is your TikTok without watermark! 🎵🔥")
+                    os.remove(video_path)
+                    return
+                else:
+                    bot.edit_message_text("❌ Could not download TikTok!", chat_id=message.chat.id, message_id=status_msg.message_id)
                     return
         except Exception as e:
             bot.edit_message_text(f"❌ Error: {str(e)}", chat_id=message.chat.id, message_id=status_msg.message_id)
             return
-        bot.delete_message(message.chat.id, status_msg.message_id)
 
     if "instagram.com" in url:
         if "/stories/" in url:
@@ -166,11 +185,12 @@ def handle_message(message):
         try:
             video_url = get_instagram_video(url)
             if video_url:
-                video_response = requests.get(video_url, headers={"User-Agent": "Mozilla/5.0"})
+                video_response = requests.get(video_url, headers={"User-Agent": "Mozilla/5.0"}, stream=True)
                 tmpdir = tempfile.mkdtemp()
                 video_path = os.path.join(tmpdir, "video.mp4")
                 with open(video_path, "wb") as f:
-                    f.write(video_response.content)
+                    for chunk in video_response.iter_content(chunk_size=8192):
+                        f.write(chunk)
                 bot.delete_message(message.chat.id, status_msg.message_id)
                 with open(video_path, "rb") as video:
                     bot.send_video(message.chat.id, video, supports_streaming=True, caption="✅ Here is your Instagram video! 📱🔥")
@@ -205,14 +225,7 @@ def handle_callback(call):
     status_msg = bot.send_message(chat_id, "⏳ Downloading... please wait! 🔄")
     try:
         content_type, content = download_content(url, mode=mode, quality=quality)
-        if content_type == "photos":
-            bot.edit_message_text(f"📸 Sending {len(content)} photo(s)...", chat_id=chat_id, message_id=status_msg.message_id)
-            media = []
-            for photo in content:
-                with open(photo, "rb") as f:
-                    media.append(telebot.types.InputMediaPhoto(f.read()))
-            bot.send_media_group(chat_id, media)
-        elif content_type == "audio":
+        if content_type == "audio":
             bot.edit_message_text("🎵 Sending your MP3...", chat_id=chat_id, message_id=status_msg.message_id)
             with open(content, "rb") as audio:
                 bot.send_audio(chat_id, audio, caption="🎵 Here is your MP3! Enjoy the music! 🎶")
@@ -228,10 +241,7 @@ def handle_callback(call):
     finally:
         user_states.pop(chat_id, None)
         try:
-            if content_type == "photos":
-                for p in content:
-                    if os.path.exists(p): os.remove(p)
-            elif os.path.exists(content):
+            if os.path.exists(content):
                 os.remove(content)
         except:
             pass
